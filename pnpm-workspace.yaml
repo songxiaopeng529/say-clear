@@ -1,0 +1,23 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# 先保留 hoisted 扁平 node_modules 布局，避免重构期间引入依赖解析变量。
+nodeLinker: hoisted
+
+# 关闭脚本运行前的依赖状态校验（否则 ignored-builds 警告会中断 turbo/脚本）。
+verifyDepsBeforeRun: false
+
+onlyBuiltDependencies:
+  - "@prisma/client"
+  - "@prisma/engines"
+  - prisma
+  - esbuild
+  - "@swc/core"
+  - "@parcel/watcher"
+
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  esbuild: true
+  prisma: true

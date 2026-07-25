@@ -1,0 +1,120 @@
+// SayClear · Prisma schema —— 与技术方案 §5.3 数据模型同源。
+// users 由 Supabase auth.users 托管；下列为应用表，均带 userId 并在 Supabase 侧启用 RLS。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Provider {
+  github
+  google
+  wechat_web
+  wechat_mp
+}
+
+enum BookStatus {
+  reading
+  done
+}
+
+enum HighlightSource {
+  text
+  ocr
+  import
+}
+
+enum SessionStatus {
+  ongoing
+  passed
+  abandoned
+}
+
+// 应用层用户档案（镜像 auth.users，存业务字段）
+model Profile {
+  id          String     @id // = auth.users.id
+  displayName String?
+  createdAt   DateTime   @default(now())
+  books       Book[]
+  identities  Identity[]
+}
+
+// 身份联合表：一个 user 挂多个登录来源
+model Identity {
+  id          String   @id @default(cuid())
+  userId      String
+  provider    Provider
+  providerUid String // 各 provider 的 openid / sub
+  unionid     String? // ★微信跨端归并的唯一锚点
+  createdAt   DateTime @default(now())
+  profile     Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUid])
+  @@index([unionid])
+  @@index([userId])
+}
+
+model Book {
+  id         String           @id @default(cuid())
+  userId     String
+  title      String
+  author     String?
+  status     BookStatus       @default(reading)
+  createdAt  DateTime         @default(now())
+  highlights Highlight[]
+  sessions   FeynmanSession[]
+  cards      OpinionCard[]
+  profile    Profile          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// 划线原文 = 本场局部 ground truth
+model Highlight {
+  id         String          @id @default(cuid())
+  bookId     String
+  userId     String
+  content    String
+  sourceType HighlightSource @default(text)
+  createdAt  DateTime        @default(now())
+  book       Book            @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@index([bookId])
+}
+
+// 费曼闯关会话：多轮对话 + 清晰度报告
+model FeynmanSession {
+  id            String        @id @default(cuid())
+  bookId        String
+  userId        String
+  status        SessionStatus @default(ongoing)
+  turns         Json          @default("[]") // [{role, content, ts}]
+  clarityReport Json? // {pass, oneLineVerdict, greenPoints[], redPoints[]}
+  startedAt     DateTime      @default(now())
+  finishedAt    DateTime?
+  book          Book          @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  card          OpinionCard?
+
+  @@index([bookId])
+}
+
+// 观点卡片：用户自己的话（铁律：非 AI 总结）
+model OpinionCard {
+  id            String         @id @default(cuid())
+  bookId        String
+  sessionId     String         @unique
+  userId        String
+  coreOpinion   String
+  myExample     String?
+  unclearPoints String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  book          Book           @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  session       FeynmanSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([bookId])
+}

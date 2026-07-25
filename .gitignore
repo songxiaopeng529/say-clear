@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+.taro/
+.turbo/
+.swc/
+*.tsbuildinfo
+
+# Prisma generated client (in node_modules under hoisted linker)
+prisma/generated/
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# Prisma
+prisma/migrations/dev.db*
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

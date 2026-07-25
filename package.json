@@ -1,0 +1,23 @@
+{
+  "name": "say-clear",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SayClear — 读完不算数，说清才算懂。AI 读书陪练。",
+  "packageManager": "pnpm@11.13.1",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint"
+  },
+  "devDependencies": {
+    "@prisma/client": "^5.22.0",
+    "prisma": "^5.22.0",
+    "turbo": "^2.5.0",
+    "typescript": "^5.6.3",
+    "vitest": "^4.1.10"
+  }
+}
