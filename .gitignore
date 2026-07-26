@@ -6,6 +6,8 @@ node_modules/
 dist/
 build/
 .next/
+.next-dev/
+.next-build/
 .taro/
 .turbo/
 .swc/

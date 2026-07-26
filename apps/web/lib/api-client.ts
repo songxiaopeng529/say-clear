@@ -10,7 +10,11 @@ import type {
 
 const BASE_URL = '/api';
 
-async function request<T>(path: string, method: 'GET' | 'POST' | 'PATCH', data?: unknown) {
+async function request<T>(
+  path: string,
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  data?: unknown,
+) {
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
     headers: { 'Content-Type': 'application/json' },
@@ -26,6 +30,7 @@ async function request<T>(path: string, method: 'GET' | 'POST' | 'PATCH', data?:
 export const api = {
   listBooks: () => request<Book[]>('/books', 'GET'),
   createBook: (input: CreateBookInput) => request<Book>('/books', 'POST', input),
+  deleteBook: (id: string) => request<{ ok: true }>(`/books/${id}`, 'DELETE'),
   getBook: (id: string) =>
     request<Book & { highlights: Highlight[]; cards: OpinionCard[] }>(
       `/books/${id}`,
