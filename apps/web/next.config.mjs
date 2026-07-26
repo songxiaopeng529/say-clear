@@ -9,7 +9,9 @@ loadEnv({ path: resolve(__dirname, '../../.env') });
 const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR ?? '.next',
   output: 'standalone',
-  outputFileTracingRoot: resolve(__dirname, '../..'),
+  experimental: {
+    outputFileTracingRoot: resolve(__dirname, '../..'),
+  },
   transpilePackages: [
     '@say-clear/types',
     '@say-clear/core',
