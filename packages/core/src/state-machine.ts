@@ -1,4 +1,4 @@
-import type { Turn } from '@say-clear/types';
+import type { SessionStatus, Turn, TurnJudgment } from '@say-clear/types';
 
 /**
  * 费曼追问状态机 —— 端无关纯逻辑（spec §8.3 + §4.2 轮次控制）。
@@ -10,13 +10,17 @@ export type FeynmanState =
   | 'FIRST_QUESTION'
   | 'PROBING'
   | 'PASSED'
+  | 'NEEDS_WORK'
+  | 'ABANDONED'
   | 'REPORT'
   | 'CARD_DRAFT';
 
-/** 追问轮数硬上限（spec §0：固定 2–3 轮） */
+/** 用户回答次数硬上限。 */
 export const MAX_PROBING_TURNS = 3;
-/** 早停下限：至少追问 1 轮才允许提前通关 */
-export const MIN_PROBING_TURNS = 1;
+/** 至少完成两次用户回答，模型才有权判定通关。 */
+export const MIN_PROBING_TURNS = 2;
+export const MIN_USER_TURNS_TO_PASS = MIN_PROBING_TURNS;
+export const MAX_USER_TURNS = MAX_PROBING_TURNS;
 
 /** 统计对话中用户回答的轮数（= PROBING 已进行的轮数） */
 export function countUserTurns(turns: Turn[]): number {
@@ -35,6 +39,71 @@ export function shouldContinueProbing(
   if (userTurnCount >= MAX_PROBING_TURNS) return false; // 到顶必给结果
   if (userTurnCount >= MIN_PROBING_TURNS && !hasStrongSignal) return false; // 早停
   return true;
+}
+
+export type ResolvedJudgedTurn =
+  | {
+      outcome: 'continue';
+      status: Extract<SessionStatus, 'ongoing'>;
+      nextQuestion: string;
+    }
+  | {
+      outcome: 'passed';
+      status: Extract<SessionStatus, 'passed'>;
+      nextQuestion: null;
+    }
+  | {
+      outcome: 'needs_work';
+      status: Extract<SessionStatus, 'needs_work'>;
+      nextQuestion: null;
+    };
+
+/**
+ * 把模型的语义判断解析为唯一流程结果。
+ * 模型负责 clear / unclear；服务端负责最低轮次、最高轮次和终态。
+ */
+export function resolveJudgedTurn(params: {
+  userTurnCount: number;
+  judgment: TurnJudgment;
+}): ResolvedJudgedTurn {
+  const { userTurnCount, judgment } = params;
+  if (
+    !Number.isInteger(userTurnCount) ||
+    userTurnCount < 1 ||
+    userTurnCount > MAX_USER_TURNS
+  ) {
+    throw new RangeError(
+      `userTurnCount 必须是 1 到 ${MAX_USER_TURNS} 之间的整数`,
+    );
+  }
+
+  if (userTurnCount >= MIN_USER_TURNS_TO_PASS && judgment.clarity === 'clear') {
+    return { outcome: 'passed', status: 'passed', nextQuestion: null };
+  }
+
+  if (userTurnCount >= MAX_USER_TURNS) {
+    return {
+      outcome: 'needs_work',
+      status: 'needs_work',
+      nextQuestion: null,
+    };
+  }
+
+  const question = judgment.nextProbe?.question.trim();
+  if (!question) {
+    throw new Error('继续闯关时模型必须提供 nextProbe.question');
+  }
+  return { outcome: 'continue', status: 'ongoing', nextQuestion: question };
+}
+
+/** 校验模型给出的证据确实逐字来自某一轮用户原话。 */
+export function isJudgmentEvidenceGrounded(
+  judgment: TurnJudgment,
+  userMessages: readonly string[],
+): boolean {
+  const quote = judgment.blockingIssue?.evidenceQuote;
+  if (!quote) return judgment.clarity === 'clear';
+  return userMessages.some((message) => message.includes(quote));
 }
 
 /** 计算下一个状态（不含副作用，纯函数） */
@@ -62,9 +131,11 @@ export function nextState(
       }
       if (event.type === 'PASS') return 'PASSED';
       return current;
-    case 'REPORT':
     case 'PASSED':
+    case 'REPORT':
       return event.type === 'GO_CARD' ? 'CARD_DRAFT' : current;
+    case 'NEEDS_WORK':
+    case 'ABANDONED':
     case 'CARD_DRAFT':
       return current;
     default:

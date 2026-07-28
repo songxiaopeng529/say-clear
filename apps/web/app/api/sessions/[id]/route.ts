@@ -1,8 +1,8 @@
-import type { Turn } from '@say-clear/types';
 import { NextResponse } from 'next/server';
 import { handleApiError, notFound } from '@/lib/api-error';
 import { requireUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { toSessionResponse } from '@/lib/feynman-session';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,15 +15,10 @@ export async function GET(
     const { userId } = await requireUser();
     const session = await prisma.feynmanSession.findFirst({
       where: { id: params.id, userId },
+      include: { card: { select: { id: true } } },
     });
     if (!session) notFound('会话不存在');
-    return NextResponse.json({
-      id: session.id,
-      bookId: session.bookId,
-      status: session.status,
-      turns: session.turns as unknown as Turn[],
-      clarityReport: session.clarityReport,
-    });
+    return NextResponse.json(toSessionResponse(session));
   } catch (e) {
     return handleApiError(e);
   }

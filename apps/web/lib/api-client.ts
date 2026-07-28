@@ -5,10 +5,36 @@ import type {
   CreateHighlightInput,
   Highlight,
   OpinionCard,
-  Turn,
+  PostMessageResponse,
+  SessionDto,
+  SessionProgress,
 } from '@say-clear/types';
 
 const BASE_URL = '/api';
+
+export interface SessionFinalizationDto {
+  required: boolean;
+  completed: boolean;
+}
+
+/** API may enrich the shared snapshot with these recovery hints. */
+export type SessionResponse = SessionDto & {
+  progress?: SessionProgress;
+  finalization?: SessionFinalizationDto;
+  cardId?: string | null;
+};
+
+export interface FinishSessionResponse {
+  report: ClarityReport;
+  session: SessionResponse;
+  finalization?: SessionFinalizationDto;
+}
+
+export interface AbandonSessionResponse {
+  session: SessionResponse;
+  progress?: SessionProgress;
+  finalization?: SessionFinalizationDto;
+}
 
 async function request<T>(
   path: string,
@@ -44,15 +70,11 @@ export const api = {
       'POST',
     ),
   getSession: (sessionId: string) =>
-    request<{
-      id: string;
-      bookId: string;
-      status: string;
-      turns: Turn[];
-      clarityReport: ClarityReport | null;
-    }>(`/sessions/${sessionId}`, 'GET'),
+    request<SessionResponse>(`/sessions/${sessionId}`, 'GET'),
   finishSession: (sessionId: string) =>
-    request<ClarityReport>(`/sessions/${sessionId}/finish`, 'POST'),
+    request<FinishSessionResponse>(`/sessions/${sessionId}/finish`, 'POST'),
+  abandonSession: (sessionId: string) =>
+    request<AbandonSessionResponse>(`/sessions/${sessionId}/abandon`, 'POST'),
   createCard: (sessionId: string) =>
     request<OpinionCard & { sourceQuotes?: string[] }>(
       `/sessions/${sessionId}/card`,
@@ -64,29 +86,11 @@ export const api = {
 export async function sendFeynmanMessage(
   sessionId: string,
   content: string,
-  onChunk: (delta: string) => void,
-): Promise<string> {
-  const res = await fetch(`${BASE_URL}/sessions/${sessionId}/messages`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
-  });
-  if (!res.ok || !res.body) {
-    const msg = await res.text().catch(() => '');
-    throw new Error(msg || `追问失败 ${res.status}`);
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let full = '';
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const delta = decoder.decode(value, { stream: true });
-    if (delta) {
-      full += delta;
-      onChunk(delta);
-    }
-  }
-  return full;
+  requestId: string,
+): Promise<PostMessageResponse> {
+  return request<PostMessageResponse>(
+    `/sessions/${sessionId}/messages`,
+    'POST',
+    { content, requestId },
+  );
 }

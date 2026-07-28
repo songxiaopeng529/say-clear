@@ -4,7 +4,11 @@
  */
 
 /** 业务只认 task，不认具体模型 */
-export type AiTask = 'feynman-chat' | 'clarity-report' | 'card-extract';
+export type AiTask =
+  | 'feynman-chat'
+  | 'feynman-judge'
+  | 'clarity-report'
+  | 'card-extract';
 
 export interface AiConfig {
   provider: string;
@@ -27,6 +31,8 @@ export function loadAiConfig(env: NodeJS.ProcessEnv = process.env): AiConfig {
   if (!feynman) throw new Error('[ai] 缺少环境变量 AI_MODEL_FEYNMAN');
   // 报告/抽取默认复用费曼模型，可分别用 env 覆盖
   const report = env.AI_MODEL_REPORT ?? feynman;
+  // 裁决优先独立配置；未配置时复用更稳定的报告模型。
+  const judge = env.AI_MODEL_JUDGE ?? report;
 
   return {
     provider,
@@ -34,6 +40,7 @@ export function loadAiConfig(env: NodeJS.ProcessEnv = process.env): AiConfig {
     apiKey,
     modelByTask: {
       'feynman-chat': feynman,
+      'feynman-judge': judge,
       'clarity-report': report,
       'card-extract': report,
     },

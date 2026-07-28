@@ -214,11 +214,89 @@ AI 逻辑拆成三层：
 
 ## 部署说明
 
-推荐部署组合：
+### 推荐方式
+
+早期最省心的部署组合：
 
 - Web：Vercel
 - Auth / DB：Supabase
 - AI：支持 OpenAI Compatible API 的模型服务
+
+如果要部署到自己的服务器，推荐使用 Docker 镜像。项目已配置 Next.js standalone 输出，镜像只包含运行时需要的文件，不会把本地 `.env` 打进镜像。
+
+### Docker 镜像
+
+1. 准备生产环境变量：
+
+```bash
+cp .env.production.example .env.production
+```
+
+填写 `.env.production`：
+
+```bash
+SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+DATABASE_URL=
+AI_PROVIDER=doubao
+AI_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+AI_API_KEY=
+AI_MODEL_FEYNMAN=
+AI_MODEL_REPORT=
+```
+
+`DATABASE_URL` 推荐使用 Supabase Session Pooler URI。
+
+2. 本地构建镜像：
+
+```bash
+export NEXT_PUBLIC_SUPABASE_URL="你的 Supabase URL"
+export NEXT_PUBLIC_SUPABASE_ANON_KEY="你的 Supabase anon key"
+
+docker build \
+  --build-arg NEXT_PUBLIC_SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL" \
+  --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY="$NEXT_PUBLIC_SUPABASE_ANON_KEY" \
+  -t say-clear-web:latest .
+```
+
+`NEXT_PUBLIC_*` 是浏览器侧变量，Next.js 会在构建时写入前端 bundle，所以构建镜像时必须传入。`DATABASE_URL`、`AI_API_KEY` 等服务端密钥仍然只通过运行时环境变量注入。
+
+3. 本地运行镜像：
+
+```bash
+docker run --rm \
+  --env-file .env.production \
+  -p 3000:3000 \
+  say-clear-web:latest
+```
+
+4. 使用 Docker Compose：
+
+```bash
+docker compose --env-file .env.production up -d --build
+```
+
+5. 服务器部署：
+
+```bash
+docker save say-clear-web:latest | gzip > say-clear-web.tar.gz
+scp say-clear-web.tar.gz user@server:/opt/say-clear/
+
+ssh user@server
+cd /opt/say-clear
+gunzip -c say-clear-web.tar.gz | docker load
+docker run -d \
+  --name say-clear-web \
+  --restart unless-stopped \
+  --env-file .env.production \
+  -p 3000:3000 \
+  say-clear-web:latest
+```
+
+生产环境通常再在容器前面放一层 Nginx/Caddy，负责 HTTPS 和域名转发。
+
+### 部署前检查
 
 部署前确认：
 
