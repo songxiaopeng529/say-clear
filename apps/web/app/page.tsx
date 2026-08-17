@@ -95,7 +95,7 @@ export default async function HomePage() {
           'Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
       }}
     >
-      <header className="relative h-[68px] border-b border-[#e8e4dc] bg-[#fafaf8]">
+      <header className="sticky top-0 z-50 h-[68px] border-b border-[#e8e4dc] bg-[#fafaf8]">
         <Link
           href="/"
           className="absolute left-10 top-5 flex h-7 items-start gap-2"
