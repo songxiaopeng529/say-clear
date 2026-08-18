@@ -2,9 +2,13 @@ import { generateObject, streamText, type CoreMessage } from 'ai';
 import type { LanguageModelV1ProviderMetadata } from '@ai-sdk/provider';
 import {
   cardDraftSchema,
+  clarityReportContentSchema,
   clarityReportSchema,
   type CardDraft,
   type ClarityReport,
+  type ClarityReportContent,
+  type TurnJudgment,
+  turnJudgmentSchema,
 } from '@say-clear/types';
 import { getModel, getProviderName } from './model.js';
 
@@ -12,7 +16,7 @@ import { getModel, getProviderName } from './model.js';
 export type { CoreMessage };
 
 /**
- * 三个 AI 调用封装 —— 对接费曼 prompt 链 spec §8。
+ * AI 调用封装 —— 对接费曼 prompt 链 spec §8。
  * prompt 内容由 packages/core 提供（system + messages），此处只负责"怎么调模型"。
  */
 
@@ -41,14 +45,31 @@ export function streamFeynmanReply(params: {
   });
 }
 
-/** 阶段③ 清晰度报告：结构化输出（偏宽松鼓励） */
-export async function generateClarityReport(params: {
+/** 阶段②：一次结构化调用同时给出清晰度裁决和下一问。 */
+export async function judgeFeynmanTurn(params: {
   system: string;
   prompt: string;
-}): Promise<ClarityReport> {
+}): Promise<TurnJudgment> {
+  const { object } = await generateObject({
+    model: getModel('feynman-judge'),
+    schema: turnJudgmentSchema,
+    mode: 'json',
+    providerOptions: noThinking(),
+    system: params.system,
+    prompt: params.prompt,
+    temperature: 0.2,
+  });
+  return object;
+}
+
+/** 阶段③：模型只整理报告文案，不拥有 pass 的决定权。 */
+export async function generateClarityReportContent(params: {
+  system: string;
+  prompt: string;
+}): Promise<ClarityReportContent> {
   const { object } = await generateObject({
     model: getModel('clarity-report'),
-    schema: clarityReportSchema,
+    schema: clarityReportContentSchema,
     // mode:'json' 走 response_format(json_object) 而非默认 tool_calls；
     // 配合 noThinking() 关推理，实测 ~5s 返回（原 ~39s）。
     mode: 'json',
@@ -58,6 +79,19 @@ export async function generateClarityReport(params: {
     temperature: 0.3, // 判定要稳定
   });
   return object;
+}
+
+/**
+ * 兼容原有导出名，但 pass 现在必须由调用方根据会话终态传入。
+ * 模型响应使用不含 pass 的 schema，因此无法推翻服务端裁决。
+ */
+export async function generateClarityReport(params: {
+  system: string;
+  prompt: string;
+  pass: boolean;
+}): Promise<ClarityReport> {
+  const content = await generateClarityReportContent(params);
+  return clarityReportSchema.parse({ pass: params.pass, ...content });
 }
 
 /** 阶段④ 卡片抽取：结构化输出（铁律：只提炼用户说过的话） */

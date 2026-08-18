@@ -34,3 +34,6 @@ pnpm-debug.log*
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# 压缩包
+*.gz

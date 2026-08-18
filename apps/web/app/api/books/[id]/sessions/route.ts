@@ -15,7 +15,7 @@ export async function POST(
 ) {
   try {
     const { userId } = await requireUser();
-    const ctx = await loadBookContext(params.id);
+    const ctx = await loadBookContext(params.id, userId);
     if (!ctx) notFound('书不存在');
 
     const firstQuestion = buildFirstQuestion(ctx);
@@ -23,7 +23,12 @@ export async function POST(
       { role: 'assistant', content: firstQuestion, ts: new Date().toISOString() },
     ];
     const session = await prisma.feynmanSession.create({
-      data: { bookId: params.id, userId, turns: turns as unknown as object },
+      data: {
+        bookId: params.id,
+        userId,
+        flowVersion: 2,
+        turns: turns as unknown as object,
+      },
     });
     return NextResponse.json({ id: session.id, firstQuestion }, { status: 201 });
   } catch (e) {

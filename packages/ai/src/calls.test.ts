@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   extractCardDraft,
   generateClarityReport,
+  generateClarityReportContent,
+  judgeFeynmanTurn,
   resetModelCache,
 } from './index.js';
 
 /**
  * 单元测试（默认跑，无需密钥/网络）——回归护栏。
- * 核心断言：clarity-report / card-extract 发出的请求确实带上了
+ * 核心断言：judge / clarity-report / card-extract 发出的请求确实带上了
  *   - thinking: { type: 'disabled' }  （关推理，本次 finish 卡死的修复）
  *   - response_format: { type: 'json_object' }（mode:'json' 而非慢的 tool_calls）
  * 防止日后有人误删 noThinking()/mode:'json' 又退回 ~39s 卡死。
@@ -45,17 +47,72 @@ beforeEach(() => {
   process.env.AI_API_KEY = 'test-key';
   process.env.AI_MODEL_FEYNMAN = 'ep-test-feynman';
   process.env.AI_MODEL_REPORT = 'ep-test-report';
+  process.env.AI_MODEL_JUDGE = 'ep-test-judge';
   resetModelCache();
 });
 
 afterEach(() => {
+  delete process.env.AI_MODEL_JUDGE;
   vi.restoreAllMocks();
 });
 
-describe('generateClarityReport（清晰度报告）', () => {
+describe('judgeFeynmanTurn（回合裁决）', () => {
+  const judgment = {
+    clarity: 'unclear',
+    assessment: {
+      coreIdea: 'clear',
+      keyTerms: 'clear',
+      logicChain: 'unclear',
+      highlightConsistency: 'consistent',
+      ownExample: 'clear',
+    },
+    blockingIssue: {
+      signal: 'logic_gap',
+      evidenceQuote: '所以就成功了',
+      explanation: '中间缺少关键一步。',
+    },
+    nextProbe: {
+      kind: 'clarification',
+      question: '等下，中间具体发生了什么呀？',
+    },
+  };
+
+  it('使用独立 judge 模型、低温、关闭推理并走 json_object', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+      capturedBody = JSON.parse(String((init as RequestInit).body));
+      return fakeChatCompletion(judgment);
+    });
+
+    const result = await judgeFeynmanTurn({
+      system: '只判断表达清晰度',
+      prompt: '用户回答……',
+    });
+
+    expect(capturedBody.model).toBe('ep-test-judge');
+    expect(capturedBody.temperature).toBe(0.2);
+    expect(capturedBody.thinking).toEqual({ type: 'disabled' });
+    expect(capturedBody.response_format).toEqual({ type: 'json_object' });
+    expect(capturedBody.tools).toBeUndefined();
+    expect(result).toEqual(judgment);
+  });
+
+  it('AI_MODEL_JUDGE 未配置时复用报告模型', async () => {
+    delete process.env.AI_MODEL_JUDGE;
+    resetModelCache();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+      capturedBody = JSON.parse(String((init as RequestInit).body));
+      return fakeChatCompletion(judgment);
+    });
+
+    await judgeFeynmanTurn({ system: 'system', prompt: 'prompt' });
+
+    expect(capturedBody.model).toBe('ep-test-report');
+  });
+});
+
+describe('generateClarityReportContent（清晰度报告文案）', () => {
   it('请求带 thinking:disabled 且 response_format 为 json_object', async () => {
     const report = {
-      pass: true,
       oneLineVerdict: '讲得很清楚',
       greenPoints: [{ point: '抓住核心', why: '逻辑对齐原文' }],
       redPoints: [],
@@ -65,7 +122,7 @@ describe('generateClarityReport（清晰度报告）', () => {
       return fakeChatCompletion(report);
     });
 
-    const result = await generateClarityReport({
+    const result = await generateClarityReportContent({
       system: '你是阅读教练',
       prompt: '用户讲解……',
     });
@@ -78,6 +135,31 @@ describe('generateClarityReport（清晰度报告）', () => {
     expect(capturedBody.tool_choice).toBeUndefined();
     // 3) 结构化输出能被正确解析回领域对象
     expect(result).toEqual(report);
+  });
+
+  it('兼容函数只采用服务端传入的 pass', async () => {
+    const content = {
+      oneLineVerdict: '还有一个地方可以继续想想',
+      greenPoints: [{ point: '核心明确', why: '主张可以复述' }],
+      redPoints: [
+        {
+          point: '因果中间缺一步',
+          signal: 'logic_gap',
+          gentleHint: '可以再想想中间发生了什么',
+        },
+      ],
+    };
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      fakeChatCompletion(content),
+    );
+
+    const result = await generateClarityReport({
+      system: '只整理文案',
+      prompt: '既定结果 needs_work',
+      pass: false,
+    });
+
+    expect(result).toEqual({ pass: false, ...content });
   });
 });
 

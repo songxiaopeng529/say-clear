@@ -1,9 +1,17 @@
 import type { BookContext } from '@say-clear/core';
 import { prisma } from './db';
 
-export async function loadBookContext(bookId: string): Promise<BookContext | null> {
-  const book = await prisma.book.findUnique({
-    where: { id: bookId },
+/**
+ * Load the prompt context only when the requested book belongs to the caller.
+ * Prisma commonly connects with a role that bypasses RLS, so ownership must be
+ * part of every application-level lookup rather than checked after the read.
+ */
+export async function loadBookContext(
+  bookId: string,
+  userId: string,
+): Promise<BookContext | null> {
+  const book = await prisma.book.findFirst({
+    where: { id: bookId, userId },
     include: { highlights: true },
   });
   if (!book) return null;

@@ -31,6 +31,7 @@ enum HighlightSource {
 enum SessionStatus {
   ongoing
   passed
+  needs_work
   abandoned
 }
 
@@ -88,16 +89,22 @@ model Highlight {
 
 // 费曼闯关会话：多轮对话 + 清晰度报告
 model FeynmanSession {
-  id            String        @id @default(cuid())
-  bookId        String
-  userId        String
-  status        SessionStatus @default(ongoing)
-  turns         Json          @default("[]") // [{role, content, ts}]
-  clarityReport Json? // {pass, oneLineVerdict, greenPoints[], redPoints[]}
-  startedAt     DateTime      @default(now())
-  finishedAt    DateTime?
-  book          Book          @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  card          OpinionCard?
+  id                    String        @id @default(cuid())
+  bookId                String
+  userId                String
+  status                SessionStatus @default(ongoing)
+  turns                 Json          @default("[]") // [{role, content, ts}]
+  clarityReport         Json? // {pass, oneLineVerdict, greenPoints[], redPoints[]}
+  flowVersion           Int           @default(1) // 1=旧手动结束流程，2=模型裁决流程
+  version               Int           @default(0) // 乐观并发版本
+  judgments             Json          @default("[]") // [{requestId,userTurnCount,judgment,outcome,createdAt}]
+  finalJudgment         Json? // 唯一终局裁决；报告不得推翻
+  processingRequestId   String? // 模型调用期间的幂等/互斥租约
+  processingStartedAt   DateTime?
+  startedAt             DateTime      @default(now())
+  finishedAt            DateTime?
+  book                  Book          @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  card                  OpinionCard?
 
   @@index([bookId])
 }

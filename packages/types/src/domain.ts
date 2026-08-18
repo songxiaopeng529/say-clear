@@ -3,12 +3,20 @@
  * 这些是前后端共享的核心数据结构。
  */
 
-import type { ClarityReport } from './feynman.js';
+import type {
+  ClarityReport,
+  TurnJudgment,
+  TurnJudgmentRecord,
+} from './feynman.js';
 
 export type Provider = 'github' | 'google' | 'wechat_web' | 'wechat_mp';
 export type BookStatus = 'reading' | 'done';
 export type HighlightSource = 'text' | 'ocr' | 'import';
-export type SessionStatus = 'ongoing' | 'passed' | 'abandoned';
+export type SessionStatus =
+  | 'ongoing'
+  | 'passed'
+  | 'needs_work'
+  | 'abandoned';
 
 export interface Profile {
   id: string;
@@ -59,6 +67,10 @@ export interface FeynmanSession {
   status: SessionStatus;
   turns: Turn[];
   clarityReport: ClarityReport | null;
+  flowVersion: number;
+  version: number;
+  judgments: TurnJudgmentRecord[];
+  finalJudgment: TurnJudgment | null;
   startedAt: string;
   finishedAt: string | null;
 }

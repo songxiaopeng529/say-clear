@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import type {
+  ClarityReport,
+  TurnJudgment,
+  TurnJudgmentRecord,
+} from './feynman.js';
+import type { SessionStatus, Turn } from './domain.js';
 
 /**
  * API 契约（DTO）—— 与技术方案 §8.2 的端点表同源。
@@ -19,11 +25,47 @@ export const createHighlightSchema = z.object({
 });
 export type CreateHighlightInput = z.infer<typeof createHighlightSchema>;
 
-// POST /sessions/:id/messages —— 用户提交回答（返回为流式，非 JSON）
+// POST /sessions/:id/messages —— 用户提交回答（返回结构化 JSON）
 export const postMessageSchema = z.object({
   content: z.string().min(1).max(4000),
-});
+  requestId: z.string().uuid(),
+}).strict();
 export type PostMessageInput = z.infer<typeof postMessageSchema>;
+
+/** 对客户端公开的会话快照。 */
+export interface SessionDto {
+  id: string;
+  bookId: string;
+  status: SessionStatus;
+  turns: Turn[];
+  clarityReport: ClarityReport | null;
+  flowVersion: number;
+  version: number;
+  judgments: TurnJudgmentRecord[];
+  finalJudgment: TurnJudgment | null;
+}
+
+export interface SessionProgress {
+  userTurnCount: number;
+  minUserTurns: number;
+  maxUserTurns: number;
+}
+
+interface PostMessageResponseBase {
+  session: SessionDto;
+  judgment: TurnJudgment;
+  progress: SessionProgress;
+}
+
+export type PostMessageResponse =
+  | (PostMessageResponseBase & {
+      outcome: 'continue';
+      question: string;
+    })
+  | (PostMessageResponseBase & {
+      outcome: 'passed' | 'needs_work';
+      finalization: 'pending' | 'ready';
+    });
 
 // PATCH /cards/:id
 export const updateCardSchema = z.object({
